@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Stroke & Circulation Calculator with Segments</title>
+  <style>
+    body { font-family: Arial, sans-serif; background: #f2f2f2; padding: 20px; }
+    .container { max-width: 500px; margin: auto; background: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
+    h1, h2 { text-align: center; margin-bottom: 16px; }
+    label { display: block; margin-top: 12px; font-weight: bold; }
+    input, select, button { width: 100%; padding: 8px; margin-top: 6px; font-size: 16px; box-sizing: border-box; }
+    button { cursor: pointer; margin-top: 10px; border: none; border-radius: 4px; background: #007aff; color: #fff; }
+    .segment-row { display: flex; gap: 8px; margin-top: 8px; }
+    .segment-row input { flex: 1; }
+    .segment-row button { flex: 0 0 auto; width: auto; padding: 8px 12px; background: #d9534f; }
+    .results { margin-top: 24px; font-size: 16px; line-height: 1.5; }
+    .results div { margin-bottom: 8px; }
+    hr { margin: 16px 0; border: none; border-top: 1px solid #ccc; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Stroke & Circulation Calculator</h1>
+    <h2>Drill String Segments</h2>
+    <div id="segmentContainer"></div>
+    <button type="button" id="addSegmentBtn">Add Segment</button>
+
+    <h2>Other Inputs</h2>
+    <label for="casingID">Casing ID (inches)</label>
+    <input type="number" id="casingID" placeholder="e.g. 9.625">
+    <label for="casingDepth">Casing Depth (ft)</label>
+    <input type="number" id="casingDepth" placeholder="e.g. 10000">
+    <label for="bitSize">Borehole ID (bit size, inches)</label>
+    <input type="number" id="bitSize" placeholder="e.g. 8.75">
+    <label for="linerDiameter">Liner Diameter (inches)</label>
+    <input type="number" id="linerDiameter" placeholder="e.g. 5">
+    <label for="strokeLength">Stroke Length (inches)</label>
+    <input type="number" id="strokeLength" placeholder="e.g. 12">
+    <label for="spm">Strokes per Minute (SPM)</label>
+    <input type="number" id="spm" placeholder="e.g. 80">
+    <label for="pumpType">Pump Type</label>
+    <select id="pumpType">
+      <option value="3">Triplex</option>
+      <option value="2">Duplex</option>
+    </select>
+    <label for="efficiency">Volumetric Efficiency (%)</label>
+    <input type="number" id="efficiency" placeholder="95">
+
+    <button type="button" id="calcBtn">Calculate</button>
+
+    <div class="results" id="results">
+      <div>Gallons per Stroke: <span id="gallonsPerStroke">-</span></div>
+      <div>Barrels per Stroke: <span id="barrelsPerStroke">-</span></div>
+      <div>Gallons per Minute (GPM): <span id="gallonsPerMinute">-</span></div>
+      <div>Barrels per Minute (BPM): <span id="barrelsPerMinute">-</span></div>
+      <hr>
+      <div>Volume to Bit: <span id="volumeToBit">-</span> bbl</div>
+      <div>Annular Volume (Bottoms Up): <span id="bottomsUpVol">-</span> bbl</div>
+      <div>Total Circulation Volume: <span id="totalCircVol">-</span> bbl</div>
+      <hr>
+      <div>Strokes to Bit: <span id="strokesToBit">-</span> stk</div>
+      <div>Bottoms Up Strokes: <span id="bottomsUpStrokes">-</span> stk</div>
+      <div>Total Circulation Strokes: <span id="totalStrokes">-</span> stk</div>
+      <hr>
+      <div>Time to Bit: <span id="timeToBit">-</span> min</div>
+      <div>Bottoms Up Time: <span id="timeBottomsUp">-</span> min</div>
+      <div>Total Circulation Time: <span id="timeTotal">-</span> min</div>
+    </div>
+  </div>
+
+  <script>
+    function addSegment(id='', od='', length='') {
+      const container = document.getElementById('segmentContainer');
+      const row = document.createElement('div'); row.className = 'segment-row';
+      row.innerHTML = `
+        <input type="number" class="seg-id" placeholder="ID (in)" value="${id}" />
+        <input type="number" class="seg-od" placeholder="OD (in)" value="${od}" />
+        <input type="number" class="seg-length" placeholder="Length (ft)" value="${length}" />
+        <button type="button" class="remove-btn">✕</button>
+      `;
+      row.querySelector('.remove-btn').onclick = () => row.remove();
+      container.appendChild(row);
+    }
+
+    document.getElementById('addSegmentBtn').addEventListener('click', () => addSegment());
+    window.addEventListener('DOMContentLoaded', () => {
+      addSegment();
+      document.getElementById('calcBtn').addEventListener('click', calculate);
+    });
+
+    function calculate() {
+      // Pump output
+      const d = parseFloat(document.getElementById('linerDiameter').value) || 0;
+      const Lstroke = parseFloat(document.getElementById('strokeLength').value) || 0;
+      const spm = parseFloat(document.getElementById('spm').value) || 0;
+      const cylinders = parseInt(document.getElementById('pumpType').value, 10) || 1;
+      const eff = (parseFloat(document.getElementById('efficiency').value) || 100) / 100;
+      const volCI = Math.PI * (d/2)**2 * Lstroke * cylinders * eff;
+      const galPS = volCI/231;
+      const bblPS = galPS/42;
+      document.getElementById('gallonsPerStroke').innerText = galPS.toFixed(4);
+      document.getElementById('barrelsPerStroke').innerText = bblPS.toFixed(4);
+      document.getElementById('gallonsPerMinute').innerText = (galPS*spm).toFixed(2);
+      document.getElementById('barrelsPerMinute').innerText = (bblPS*spm).toFixed(2);
+
+      // Volume to Bit (sum segment internal volumes)
+      const segRows = document.querySelectorAll('.segment-row');
+      let volumeToBit = 0;
+      let cumulativeDepth = 0;
+      segRows.forEach(row => {
+        const idVal = parseFloat(row.querySelector('.seg-id').value) || 0;
+        const lenValFt = parseFloat(row.querySelector('.seg-length').value) || 0;
+        const lenValIn = lenValFt*12;
+        volumeToBit += (Math.PI*(idVal/2)**2 * lenValIn/231)/42;
+        cumulativeDepth += lenValFt;
+      });
+      document.getElementById('volumeToBit').innerText = volumeToBit.toFixed(1);
+
+      // Annular Volume (bottoms up) using segment OD and piecewise Dh
+      const casingDepth = parseFloat(document.getElementById('casingDepth').value) || 0;
+      const bitSize = parseFloat(document.getElementById('bitSize').value) || 0;
+      let annVolBbl = 0;
+      let depthAcc = 0;
+      segRows.forEach(row => {
+        const odVal = parseFloat(row.querySelector('.seg-od').value) || 0;
+        const lenValFt = parseFloat(row.querySelector('.seg-length').value) || 0;
+        // segment spans [depthAcc, depthAcc+lenValFt]
+        let start = depthAcc;
+        let end = depthAcc + lenValFt;
+        // cased portion
+        if (start < casingDepth) {
+          const casedEnd = Math.min(end, casingDepth);
+          const casedLen = casedEnd - start;
+          const dh = parseFloat(document.getElementById('casingID').value) || 0;
+          annVolBbl += ((Math.pow(dh,2)-Math.pow(odVal,2))*casedLen)/1029.4;
+        }
+        // open portion
+        if (end > casingDepth) {
+          const openStart = Math.max(start, casingDepth);
+          const openLen = end - openStart;
+          annVolBbl += ((Math.pow(bitSize,2)-Math.pow(odVal,2))*openLen)/1029.4;
+        }
+        depthAcc = end;
+      });
+      document.getElementById('bottomsUpVol').innerText = annVolBbl.toFixed(2);
+
+      // Strokes and totals
+      const strokesToBit = volumeToBit / bblPS;
+      const bottomsUpStrokes = annVolBbl / bblPS;
+      const totalStrokes = strokesToBit + bottomsUpStrokes;
+      document.getElementById('strokesToBit').innerText = strokesToBit.toFixed(0);
+      document.getElementById('bottomsUpStrokes').innerText = bottomsUpStrokes.toFixed(0);
+      document.getElementById('totalStrokes').innerText = totalStrokes.toFixed(0);
+      document.getElementById('totalCircVol').innerText = (totalStrokes*bblPS).toFixed(1);
+      document.getElementById('timeToBit').innerText = (strokesToBit/spm).toFixed(0);
+      document.getElementById('timeBottomsUp').innerText = (bottomsUpStrokes/spm).toFixed(0);
+      document.getElementById('timeTotal').innerText = (totalStrokes/spm).toFixed(0);
+    }
+  </script>
+</body>
+</html>
